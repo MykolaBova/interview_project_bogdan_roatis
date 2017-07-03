@@ -1,7 +1,5 @@
 package roatis.bogdan.places.model.data;
 
-import com.google.android.gms.maps.model.LatLng;
-
 /**
  * Created by Bogdan Roatis on 7/3/17.
  */
@@ -9,24 +7,18 @@ import com.google.android.gms.maps.model.LatLng;
 public class Place {
 
     private String name;
-    private String type;
-    private LatLng coordinates;
+    private String icon;
 
-    public Place(String name, String type, LatLng coordinates) {
+    public Place(String name, String icon) {
         this.name = name;
-        this.type = type;
-        this.coordinates = coordinates;
+        this.icon = icon;
     }
 
     public String getName() {
         return name;
     }
 
-    public String getType() {
-        return type;
-    }
-
-    public LatLng getCoordinates() {
-        return coordinates;
+    public String getIcon() {
+        return icon;
     }
 }

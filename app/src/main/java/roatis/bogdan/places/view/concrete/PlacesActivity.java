@@ -1,5 +1,6 @@
 package roatis.bogdan.places.view.concrete;
 
+import android.os.Build;
 import android.os.Bundle;
 import android.support.annotation.NonNull;
 import android.support.design.widget.Snackbar;
@@ -53,6 +54,19 @@ public class PlacesActivity extends BaseActivity implements IPlacesView {
     @Override
     public void startActionMode(ActionMode.Callback actionModeCallback) {
         startSupportActionMode(actionModeCallback);
+    }
+
+    @Override
+    public void requestNecessaryPermissions(String[] permissions) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            requestPermissions(permissions, 27);
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        mPlacesPresenter.onPermissionsResult(grantResults);
     }
 
     @Override

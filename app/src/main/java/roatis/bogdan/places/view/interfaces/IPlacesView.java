@@ -15,4 +15,5 @@ public interface IPlacesView extends IBaseView {
 
     void startActionMode(ActionMode.Callback actionModeCallback);
 
+    void requestNecessaryPermissions(String[] permissions);
 }

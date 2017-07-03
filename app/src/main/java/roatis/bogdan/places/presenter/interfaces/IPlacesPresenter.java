@@ -15,4 +15,6 @@ public interface IPlacesPresenter extends IBasePresenter<IPlacesView> {
     void onActionModeFinished(ActionMode actionMode);
 
     void onUndoDelete();
+
+    void onPermissionsResult(int[] grantResults);
 }

@@ -1,6 +1,10 @@
 package roatis.bogdan.places.presenter.concrete;
 
+import android.Manifest;
+import android.app.Activity;
+import android.content.pm.PackageManager;
 import android.os.Handler;
+import android.support.v4.app.ActivityCompat;
 import android.support.v7.view.ActionMode;
 import android.support.v7.widget.RecyclerView;
 import android.util.SparseBooleanArray;
@@ -10,14 +14,15 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 
-import com.google.android.gms.maps.model.LatLng;
-
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
 import roatis.bogdan.places.R;
+import roatis.bogdan.places.model.concrete.LocationModelImpl;
 import roatis.bogdan.places.model.concrete.PlaceModelImpl;
 import roatis.bogdan.places.model.data.Place;
+import roatis.bogdan.places.model.interfaces.ILocationModel;
 import roatis.bogdan.places.model.interfaces.IPlaceModel;
 import roatis.bogdan.places.presenter.interfaces.IPlacesPresenter;
 import roatis.bogdan.places.view.custom.PlaceItem;
@@ -27,26 +32,34 @@ import roatis.bogdan.places.view.interfaces.IPlacesView;
  * Created by Bogdan Roatis on 7/3/17.
  */
 
-public class PlacesPresenterImpl extends BaseAbstractPresenter<IPlacesView> implements IPlacesPresenter {
+public class PlacesPresenterImpl extends BaseAbstractPresenter<IPlacesView> implements IPlacesPresenter, ILocationModel.OnLocationReceived, IPlaceModel.OnPlacesCallback {
 
-    private CitiesAdapter mCitiesAdapter;
-    private IPlaceModel iPlaceModel;
+    private CitiesAdapter mPlacesAdapter;
+    private IPlaceModel mPlaceModel;
+    private ILocationModel mLocationModel;
     private ActionMode mActionMode;
 
     public PlacesPresenterImpl(IPlacesView iPlacesView) {
         setView(iPlacesView);
 
-        iPlaceModel = new PlaceModelImpl();
-        mCitiesAdapter = new CitiesAdapter(getMockedCities());
-        presentedView.setAdapter(mCitiesAdapter);
-    }
-
-    private List<Place> getMockedCities() {
-        List<Place> cities = new ArrayList<>();
-        for (int i = 0; i < 5; i++) {
-            cities.add(new Place("City " + i, "Locality", new LatLng(30, 30)));
+        mPlaceModel = PlaceModelImpl.getInstance();
+        if (ActivityCompat.checkSelfPermission(presentedView.getViewContext(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(presentedView.getViewContext(), Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            presentedView.requestNecessaryPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION});
+            // TODO: Consider calling
+            //    ActivityCompat#requestPermissions
+            // here to request the missing permissions, and then overriding
+            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+            //                                          int[] grantResults)
+            // to handle the case where the user grants the permission. See the documentation
+            // for ActivityCompat#requestPermissions for more details.
+            return;
+        } else {
+            mLocationModel = LocationModelImpl.getInstance(presentedView.getViewContext());
+            ((LocationModelImpl) mLocationModel).setOnLocationReceived(this);
         }
-        return cities;
+
+        mPlacesAdapter = new CitiesAdapter();
+        presentedView.setAdapter(mPlacesAdapter);
     }
 
     @Override
@@ -62,15 +75,42 @@ public class PlacesPresenterImpl extends BaseAbstractPresenter<IPlacesView> impl
 
     @Override
     public void onUndoDelete() {
-        mCitiesAdapter.restoreDeletedItems();
+        mPlacesAdapter.restoreDeletedItems();
+    }
+
+    @Override
+    public void onPermissionsResult(int[] grantResults) {
+        if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            mLocationModel = LocationModelImpl.getInstance(presentedView.getViewContext());
+            ((LocationModelImpl) mLocationModel).setOnLocationReceived(this);
+        }
+    }
+
+    @Override
+    public void onLocationReceived() {
+        try {
+            mPlaceModel.getPlaces(mLocationModel.getLastKnownLocation(), IPlaceModel.Type.RESTAURANTS, this);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Override
+    public void onPlacesReceived(final List<Place> places) {
+        ((Activity) presentedView.getViewContext()).runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                mPlacesAdapter.setPlaces(places);
+            }
+        });
     }
 
     private class CitiesAdapter extends RecyclerView.Adapter<PlaceItem> implements PlaceItem.OnPlaceClickListener, PlaceItem.OnPlaceLongClickListener {
 
         private static final int DELETE_NOTIFICATION_TIME = 5000;
 
-        private List<Place> cities;
-        private List<Place> selectedCities;
+        private List<Place> places;
+        private List<Place> selectedPlaces;
         private List<Place> pendingDeletedItems;
         private Handler deleteHandler;
         private SparseBooleanArray selectedItems;
@@ -79,17 +119,17 @@ public class PlacesPresenterImpl extends BaseAbstractPresenter<IPlacesView> impl
             this(new ArrayList<Place>());
         }
 
-        private CitiesAdapter(List<Place> cities) {
-            this.cities = cities == null ? new ArrayList<Place>() : cities;
+        private CitiesAdapter(List<Place> places) {
+            this.places = places == null ? new ArrayList<Place>() : places;
             deleteHandler = new Handler();
             selectedItems = new SparseBooleanArray();
-            selectedCities = new ArrayList<>();
+            selectedPlaces = new ArrayList<>();
             pendingDeletedItems = new ArrayList<>();
         }
 
-        public void setCities(List<Place> cities) {
-            this.cities = cities == null ? new ArrayList<Place>() : cities;
-            selectedCities.clear();
+        public void setPlaces(List<Place> cities) {
+            this.places = cities == null ? new ArrayList<Place>() : cities;
+            selectedPlaces.clear();
             pendingDeletedItems.clear();
             notifyDataSetChanged();
         }
@@ -101,7 +141,9 @@ public class PlacesPresenterImpl extends BaseAbstractPresenter<IPlacesView> impl
 
         @Override
         public void onBindViewHolder(PlaceItem holder, int position) {
-            holder.setTitle(cities.get(position).getName());
+            Place place = places.get(position);
+            holder.setTitle(place.getName());
+            holder.setIcon(place.getIcon());
             holder.setStatus(getSelectedItems().contains(position));
             holder.setOnPlaceClickListener(this);
             holder.setOnPlaceLongClickListener(this);
@@ -109,7 +151,7 @@ public class PlacesPresenterImpl extends BaseAbstractPresenter<IPlacesView> impl
 
         @Override
         public int getItemCount() {
-            return cities.size();
+            return places.size();
         }
 
         @Override
@@ -117,7 +159,7 @@ public class PlacesPresenterImpl extends BaseAbstractPresenter<IPlacesView> impl
             if (mActionMode != null) {
                 toggleSelection(position);
             } else {
-                Place place = cities.get(position);
+                Place place = places.get(position);
             }
         }
 
@@ -174,28 +216,28 @@ public class PlacesPresenterImpl extends BaseAbstractPresenter<IPlacesView> impl
             return items;
         }
 
-        public List<Place> getSelectedCities() {
+        public List<Place> getSelectedPlaces() {
             for (int i = 0; i < selectedItems.size(); i++) {
-                selectedCities.add(cities.get(selectedItems.keyAt(i)));
+                selectedPlaces.add(places.get(selectedItems.keyAt(i)));
             }
-            return selectedCities;
+            return selectedPlaces;
         }
 
         public void deleteAllSelected() {
             pendingDeletedItems.clear();
-            for (Place place : cities) {
+            for (Place place : places) {
                 pendingDeletedItems.add(place);
             }
-            cities.removeAll(getSelectedCities());
+            places.removeAll(getSelectedPlaces());
             notifyDataSetChanged();
             deleteHandler.postDelayed(deleteRunnable, DELETE_NOTIFICATION_TIME);
         }
 
         public void restoreDeletedItems() {
             deleteHandler.removeCallbacks(deleteRunnable);
-            cities.clear();
+            places.clear();
             for (Place place : pendingDeletedItems) {
-                cities.add(place);
+                places.add(place);
             }
             pendingDeletedItems.clear();
             notifyDataSetChanged();
@@ -204,9 +246,9 @@ public class PlacesPresenterImpl extends BaseAbstractPresenter<IPlacesView> impl
         private Runnable deleteRunnable = new Runnable() {
             @Override
             public void run() {
-                //TODO use getSelectedCities to delete the cities
-//                iCityModel.deleteCities(selectedCities);
-                mCitiesAdapter.clearSelections();
+                //TODO use getSelectedPlaces to delete the places
+//                iCityModel.deleteCities(selectedPlaces);
+                mPlacesAdapter.clearSelections();
             }
         };
     }
@@ -227,7 +269,7 @@ public class PlacesPresenterImpl extends BaseAbstractPresenter<IPlacesView> impl
         public boolean onActionItemClicked(ActionMode mode, MenuItem item) {
             switch (item.getItemId()) {
                 case R.id.delete:
-                    mCitiesAdapter.deleteAllSelected();
+                    mPlacesAdapter.deleteAllSelected();
                     presentedView.showDeleteUndoAction();
                     mode.finish();
                     return true;
@@ -238,7 +280,7 @@ public class PlacesPresenterImpl extends BaseAbstractPresenter<IPlacesView> impl
         @Override
         public void onDestroyActionMode(ActionMode mode) {
             mode = null;
-            mCitiesAdapter.clearSelections();
+            mPlacesAdapter.clearSelections();
         }
     };
 }
