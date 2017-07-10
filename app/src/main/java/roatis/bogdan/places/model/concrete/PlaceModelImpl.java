@@ -1,9 +1,9 @@
 package roatis.bogdan.places.model.concrete;
 
 import android.location.Location;
+import android.util.Log;
 
 import com.google.gson.Gson;
-import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
 
 import org.json.JSONException;
@@ -14,8 +14,10 @@ import java.util.List;
 
 import okhttp3.Call;
 import okhttp3.Callback;
+import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
+import okhttp3.RequestBody;
 import okhttp3.Response;
 import roatis.bogdan.places.model.data.Place;
 import roatis.bogdan.places.model.interfaces.IPlaceModel;
@@ -25,6 +27,8 @@ import roatis.bogdan.places.model.interfaces.IPlaceModel;
  */
 
 public class PlaceModelImpl implements IPlaceModel {
+
+    private static final String TAG = PlaceModelImpl.class.getSimpleName();
 
     //    "https://maps.googleapis.com/maps/api/place/nearbysearch/output?parameters"
     private static final String URL_BASE = "https://maps.googleapis.com/maps/api/place/nearbysearch/";
@@ -41,6 +45,9 @@ public class PlaceModelImpl implements IPlaceModel {
     private static final int DEFAULT_RADIUS = 500;
     private static final Type DEFAULT_TYPE = Type.RESTAURANTS;
     private static final String DEFAULT_KEY = "AIzaSyCw2XNwulXOdZgiSbvxALBvDkcSlbSiFgo";
+
+    private static final String URL_BASE_SERVER = "http://192.168.1.101:8888";
+    private static final String URL_SET_USERS = "/set_users";
 
     private static PlaceModelImpl instance;
 
@@ -63,10 +70,22 @@ public class PlaceModelImpl implements IPlaceModel {
         return instance;
     }
 
-    private void run(String url, Callback callback) throws IOException {
+    private void get(String url, Callback callback) throws IOException {
         Request request = new Request.Builder()
                 .url(url)
                 .build();
+
+        client.newCall(request).enqueue(callback);
+    }
+
+    private void post(String url, String body, Callback callback) {
+        MediaType textPlainMT = MediaType.parse("text/plain; charset=utf-8");
+
+        Request request = new Request.Builder()
+                .url(url)
+                .post(RequestBody.create(textPlainMT, body))
+                .build();
+
 
         client.newCall(request).enqueue(callback);
     }
@@ -96,7 +115,7 @@ public class PlaceModelImpl implements IPlaceModel {
             throw new Error("The radius is lower or equals to 0");
         }
 
-        run(getUrl(location, radiusInMeters, type), new Callback() {
+        get(getUrl(location, radiusInMeters, type), new Callback() {
             @Override
             public void onFailure(Call call, IOException e) {
 
@@ -106,10 +125,21 @@ public class PlaceModelImpl implements IPlaceModel {
             public void onResponse(Call call, Response response) throws IOException {
                 if (onPlacesCallback != null) {
                     try {
-//                        String res = response.body().toString();
-//                        JSONObject jsonObject = new JSONObject(res.substring(1, res.length() - 1));
                         JSONObject jsonObject = new JSONObject(response.body().string());
-                        onPlacesCallback.onPlacesReceived((List<Place>) gson.fromJson(jsonObject.getJSONArray("results").toString(), new TypeToken<List<Place>>() {}.getType()));
+                        List<Place> places = gson.fromJson(jsonObject.getJSONArray("results").toString(), new TypeToken<List<Place>>() {
+                        }.getType());
+                        post(URL_BASE_SERVER + URL_SET_USERS, new Gson().toJson(places), new Callback() {
+                            @Override
+                            public void onFailure(Call call, IOException e) {
+                                e.printStackTrace();
+                            }
+
+                            @Override
+                            public void onResponse(Call call, Response response) throws IOException {
+                                Log.e(TAG, response.body().string());
+                            }
+                        });
+                        onPlacesCallback.onPlacesReceived(places);
                     } catch (JSONException e) {
                         e.printStackTrace();
                     }
