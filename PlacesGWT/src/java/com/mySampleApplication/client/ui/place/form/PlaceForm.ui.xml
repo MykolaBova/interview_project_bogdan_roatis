@@ -1,0 +1,18 @@
+<ui:UiBinder xmlns:ui='urn:ui:com.google.gwt.uibinder'
+             xmlns:g='urn:import:com.google.gwt.user.client.ui'>
+
+    <g:HTMLPanel>
+        <form style="padding: 10px; background: #eee; border: 3px solid #aaa; margin: 50px; width: 250px; height: 400px;">
+            <g:TextBox name="locationName"
+                       ui:field='locationName'/>
+            <g:TextBox name="locationAddress"
+                       ui:field='locationAddress'/>
+            <g:TextBox name="locationLatitude"
+                       ui:field='locationLatitude'/>
+            <g:TextBox name="locationLongitude"
+                       ui:field='locationLongitude'/>
+            <g:TextBox name="locationIcon"
+                       ui:field='locationIcon'/>
+        </form>
+    </g:HTMLPanel>
+</ui:UiBinder>
